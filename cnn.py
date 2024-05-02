@@ -26,6 +26,9 @@ class ImageClassifierApp:
         btn_load_train = ttk.Button(frame_train, text="Load Training Images", command=self.load_training)
         btn_load_train.pack(side=tk.LEFT)
 
+        self.accuracy_label = tk.Label(frame_train)
+        self.accuracy_label.pack(side=tk.RIGHT, padx=30)
+
         frame_test = tk.LabelFrame(self.root, text="Test Image", padx=10, pady=10)
         frame_test.pack(padx=10, pady=5, fill="both", expand="yes")
 
@@ -34,6 +37,9 @@ class ImageClassifierApp:
 
         self.image_label = tk.Label(frame_test)
         self.image_label.pack(side=tk.LEFT, padx=30)
+
+        self.result_label = tk.Label(frame_test)
+        self.result_label.pack(side=tk.RIGHT, padx=30)
 
         frame_config = tk.LabelFrame(self.root, text="Configuration", padx=10, pady=10)
         frame_config.pack(padx=10, pady=5, fill="both", expand="yes")
@@ -49,7 +55,7 @@ class ImageClassifierApp:
         btn_test = ttk.Button(root, text="Classify Image", command=self.classify_img)
         btn_test.pack(fill='x', padx=10, pady=5)
 
-        self.output_text = tk.Text(self.root, height=4)
+        self.output_text = tk.Text(self.root, height=10, background='white', foreground='black')
         self.output_text.pack(fill='both', padx=10, pady=5, expand=True)
 
     def load_training(self):
@@ -63,8 +69,9 @@ class ImageClassifierApp:
         try:
             if self.training_images.size > 0 and len(self.training_labels) > 0:
                 epochs = int(self.entry_epochs.get())
-                train_model(self.training_images, self.training_labels, self.model, epochs)
-                self.output_text.insert(tk.END, "Training complete!.\n")
+                loss, accuracy = train_model(self.training_images, self.training_labels, self.model, epochs)
+                self.accuracy_label.config(text=f"Accuracy:{accuracy*100:.2f}%, Loss: {loss*100:.2f}%")
+                self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
             else:
                 self.output_text.insert(tk.END, "Failed to train the model due to the lack of training data.\n")
         except AttributeError:
@@ -73,7 +80,7 @@ class ImageClassifierApp:
 
     def load_and_display_test(self):
         img_array, img = load_test_image()
-        img = img.resize((150, 150), Image.LANCZOS)
+        img = img.resize((180, 180), Image.LANCZOS)
         photo = ImageTk.PhotoImage(img)
         self.image_label.config(image=photo)
         self.image_label.image = photo
@@ -87,6 +94,7 @@ class ImageClassifierApp:
                 self.output_text.insert(tk.END, "Failed to load test data.\n")
 
             result = classify_image(self.test_img, ['cats', 'dogs'], self.model)
+            self.result_label.config(text=f"class: {result}", font=("Helvetica", 16))
             self.output_text.insert(tk.END, f"Image classified as: {result}\n")
         except AttributeError:
             self.output_text.insert(tk.END, "Failed to classify the image due to the lack of test data.\n")
@@ -112,6 +120,8 @@ def create_model():
 
 def train_model(images, labels, model, epochs):
     model.fit(images, labels, epochs=epochs)
+    loss, accuracy = model.evaluate(images, labels)
+    return loss, accuracy
 
 
 def augment_image(img):
