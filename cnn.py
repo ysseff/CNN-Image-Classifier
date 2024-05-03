@@ -16,6 +16,7 @@ class ImageClassifierApp:
         self.model = create_model()
         self.datagen = create_image_generator()
         self.test_datagen = ImageDataGenerator(rescale=1. / 255)
+        self.test_datagen1 = ImageDataGenerator(rescale=1. / 255)
 
 
         # GUI components setup
@@ -25,8 +26,11 @@ class ImageClassifierApp:
         frame_train = tk.LabelFrame(self.root, text="Training Images", padx=10, pady=10)
         frame_train.pack(padx=10, pady=5, fill="both", expand="yes")
 
-        btn_load_train = ttk.Button(frame_train, text="Load Training Images", command=self.load_training)
+        btn_load_train = ttk.Button(frame_train, text="Load Training Set", command=self.load_training)
         btn_load_train.pack(side=tk.LEFT)
+
+        self.btn_load_test_set = ttk.Button(frame_train, text="Load Testing Set", command=self.load_validation)
+        self.btn_load_test_set.pack(side=tk.LEFT, padx=10)
 
         self.accuracy_label = tk.Label(frame_train)
         self.accuracy_label.pack(side=tk.RIGHT, padx=30)
@@ -63,15 +67,22 @@ class ImageClassifierApp:
 
     def load_training(self):
         try:
-            self.train_gen = load_training_images(self.datagen)  # Your function to load images
+            self.train_set = load_training_images(self.datagen)  # Your function to load images
             self.output_text.insert(tk.END, "Training images loaded successfully.\n")
         except FileNotFoundError:
             self.output_text.insert(tk.END, "Training images not found.\n")
 
+    def load_validation(self):
+        try:
+            self.test_set = load_training_set(self.test_datagen)  # Your function to load images
+            self.output_text.insert(tk.END, "Test set loaded successfully.\n")
+        except FileNotFoundError:
+            self.output_text.insert(tk.END, "Test set not found.\n")
+
     def train_model(self):
         try:
             epochs = int(self.entry_epochs.get())
-            loss, accuracy = train_model(self.train_gen, self.model, epochs)
+            loss, accuracy = train_model(self.train_set, self.test_set, self.model, epochs)
             self.accuracy_label.config(text=f"Accuracy:{accuracy*100:.2f}%, Loss: {loss*100:.2f}%", font=("Helvetica", 16))
             self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
         except Exception as e:
@@ -81,7 +92,7 @@ class ImageClassifierApp:
 
     def load_and_display_test(self):
         try:
-            img_array, img = load_test_image(self.test_datagen)  # Ensure to pass the correct ImageDataGenerator instance
+            img_array, img = load_test_image(self.test_datagen1)  # Ensure to pass the correct ImageDataGenerator instance
             if img is not None:
                 # Prepare the image for display
                 img = img.resize((180, 180), Image.LANCZOS)  # Resize using PIL if needed for display purposes
@@ -101,7 +112,7 @@ class ImageClassifierApp:
             if self.test_img is None:
                 self.output_text.insert(tk.END, "Failed to load test data.\n")
 
-            result, confidence = classify_image(self.test_img, ['cats', 'dogs'], self.model)
+            result, confidence = classify_image(self.test_img, self.model)
             self.result_label.config(text=f"class: {result}, confidence: {confidence:.2f}%", font=("Helvetica", 16))
             self.output_text.insert(tk.END, f"Image classified as: {result}\n")
         except AttributeError:
@@ -110,7 +121,7 @@ class ImageClassifierApp:
 
 def create_model():
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Input(shape=(224, 224, 3)),
+        tf.keras.layers.Input(shape=(64, 64, 3)),
         tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
         tf.keras.layers.MaxPooling2D(2, 2),
         tf.keras.layers.Dropout(0.25),  # Dropout after first pooling layer
@@ -122,18 +133,18 @@ def create_model():
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu'),
         tf.keras.layers.Dropout(0.5),  # Higher dropout rate before the final dense layer
-        tf.keras.layers.Dense(2, activation='softmax')
+        tf.keras.layers.Dense(1, activation='sigmoid')
     ])
 
     model.compile(optimizer='adam',
-                  loss='sparse_categorical_crossentropy',
+                  loss='binary_crossentropy',
                   metrics=['accuracy'])
     return model
 
 
 def create_image_generator():
     datagen = ImageDataGenerator(
-        rotation_range=40,  # Randomly rotate images in the range (degrees, 0 to 180)
+        rotation_range=30,  # Randomly rotate images in the range (degrees, 0 to 180)
         width_shift_range=0.2,  # Randomly shift images horizontally (fraction of total width)
         height_shift_range=0.2,  # Randomly shift images vertically (fraction of total height)
         shear_range=0.2,  # Randomly shear transformations
@@ -145,9 +156,9 @@ def create_image_generator():
 
     return datagen
 
-def train_model(images, model, epochs):
-    model.fit(images, epochs=epochs)
-    loss, accuracy = model.evaluate(images)
+def train_model(training_images, validation_images, model, epochs):
+    model.fit(x=training_images, validation_data=validation_images, epochs=epochs)
+    loss, accuracy = model.evaluate(training_images)
     return loss, accuracy
 
 
@@ -155,7 +166,7 @@ def load_training_images(datagen):
     directory = filedialog.askdirectory(title="Select training data directory")
     train_generator = datagen.flow_from_directory(
         directory,  # Path to the target directory
-        target_size=(224, 224),  # Resizes all images to 224 x 224
+        target_size=(64, 64),  # Resizes all images to 224 x 224
         batch_size=32,  # Size of the batches of data (default: 32)
         class_mode='binary'  # Type of classification (binary for 2 classes)
     )
@@ -163,12 +174,24 @@ def load_training_images(datagen):
     return train_generator
 
 
+def load_training_set(test_datagen):
+    directory = filedialog.askdirectory(title="Select test data directory")
+    test_generator = test_datagen.flow_from_directory(
+        directory,  # Path to the target directory
+        target_size=(64, 64),  # Resizes all images to 224 x 224
+        batch_size=32,  # Size of the batches of data (default: 32)
+        class_mode='binary'  # Type of classification (binary for 2 classes)
+    )
+
+    return test_generator
+
+
 def load_test_image(test_datagen):
     filetypes = [('PNG files', '*.png'), ('JPG files', '*.jpg'), ('JPEG files', '*.jpeg')]
     image_path = filedialog.askopenfilename(title="Open file", filetypes=filetypes)
 
     # Load and preprocess the image
-    img = load_img(image_path, target_size=(224, 224))
+    img = load_img(image_path, target_size=(64, 64))
     img_array = img_to_array(img)
     img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
     img_array = next(test_datagen.flow(img_array, batch_size=1))[0]  # Apply the same transformations as training
@@ -179,17 +202,17 @@ def load_test_image(test_datagen):
     return img_array, img
 
 
-def classify_image(image_array, class_names, model):
+def classify_image(image_array, model):
     if image_array is None:
         return "No image loaded", None
 
     image_array = np.expand_dims(image_array, axis=0)  # Prepare batch
     predictions = model.predict(image_array)
-    predicted_index = np.argmax(predictions, axis=1)[0]  # Get the index of the highest probability
-    predicted_class_name = class_names[predicted_index]  # Map index to class name
-    confidence = np.max(predictions) * 100  # Confidence percentage
+    predicted_class = 'dog' if predictions[0, 0] > 0.5 else 'cat'
+    confidence = predictions[0, 0] if predicted_class == 'dog' else 1 - predictions[0, 0]
 
-    return predicted_class_name, confidence
+    return predicted_class, confidence * 100
+
 
 
 
