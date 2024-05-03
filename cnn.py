@@ -2,9 +2,9 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageOps, ImageEnhance, ImageTk
-import random
-import os
+from PIL import Image, ImageTk
+from keras.src.legacy.preprocessing.image import ImageDataGenerator
+from keras.src.utils import load_img, img_to_array
 
 
 class ImageClassifierApp:
@@ -14,6 +14,8 @@ class ImageClassifierApp:
 
         # Initialize the model
         self.model = create_model()
+        self.datagen = create_image_generator()
+        self.test_datagen = ImageDataGenerator(rescale=1. / 255)
 
 
         # GUI components setup
@@ -57,35 +59,41 @@ class ImageClassifierApp:
 
         self.output_text = tk.Text(self.root, height=10, background='white', foreground='black')
         self.output_text.pack(fill='both', padx=10, pady=5, expand=True)
+        self.output_text.configure( font='helvetica 14')
 
     def load_training(self):
-        self.training_images, self.training_labels = load_training_images()  # Your function to load images
-        if self.training_images.size > 0 and len(self.training_labels) > 0:
+        try:
+            self.train_gen = load_training_images(self.datagen)  # Your function to load images
             self.output_text.insert(tk.END, "Training images loaded successfully.\n")
-        else:
-            self.output_text.insert(tk.END, "Failed to load training data.\n")
+        except FileNotFoundError:
+            self.output_text.insert(tk.END, "Training images not found.\n")
 
     def train_model(self):
         try:
-            if self.training_images.size > 0 and len(self.training_labels) > 0:
-                epochs = int(self.entry_epochs.get())
-                loss, accuracy = train_model(self.training_images, self.training_labels, self.model, epochs)
-                self.accuracy_label.config(text=f"Accuracy:{accuracy*100:.2f}%, Loss: {loss*100:.2f}%")
-                self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
-            else:
-                self.output_text.insert(tk.END, "Failed to train the model due to the lack of training data.\n")
-        except AttributeError:
+            epochs = int(self.entry_epochs.get())
+            loss, accuracy = train_model(self.train_gen, self.model, epochs)
+            self.accuracy_label.config(text=f"Accuracy:{accuracy*100:.2f}%, Loss: {loss*100:.2f}%", font=("Helvetica", 16))
+            self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
+        except Exception as e:
             self.output_text.insert(tk.END, "No training data loaded.\n")
+            print(e)
 
 
     def load_and_display_test(self):
-        img_array, img = load_test_image()
-        img = img.resize((180, 180), Image.LANCZOS)
-        photo = ImageTk.PhotoImage(img)
-        self.image_label.config(image=photo)
-        self.image_label.image = photo
-        self.test_img = img_array
-        self.output_text.insert(tk.END, "Test image loading complete.\n")
+        try:
+            img_array, img = load_test_image(self.test_datagen)  # Ensure to pass the correct ImageDataGenerator instance
+            if img is not None:
+                # Prepare the image for display
+                img = img.resize((180, 180), Image.LANCZOS)  # Resize using PIL if needed for display purposes
+                photo = ImageTk.PhotoImage(img)
+                self.image_label.config(image=photo)
+                self.image_label.image = photo
+                self.test_img = img_array  # This should be the processed array used for prediction
+                self.output_text.insert(tk.END, "Test image loading complete.\n")
+            else:
+                self.output_text.insert(tk.END, "Failed to load test image.\n")
+        except FileNotFoundError:
+            self.output_text.insert(tk.END, "Test image not found.\n")
 
 
     def classify_img(self):
@@ -93,8 +101,8 @@ class ImageClassifierApp:
             if self.test_img is None:
                 self.output_text.insert(tk.END, "Failed to load test data.\n")
 
-            result = classify_image(self.test_img, ['cats', 'dogs'], self.model)
-            self.result_label.config(text=f"class: {result}", font=("Helvetica", 16))
+            result, confidence = classify_image(self.test_img, ['cats', 'dogs'], self.model)
+            self.result_label.config(text=f"class: {result}, confidence: {confidence:.2f}%", font=("Helvetica", 16))
             self.output_text.insert(tk.END, f"Image classified as: {result}\n")
         except AttributeError:
             self.output_text.insert(tk.END, "Failed to classify the image due to the lack of test data.\n")
@@ -105,10 +113,15 @@ def create_model():
         tf.keras.layers.Input(shape=(224, 224, 3)),
         tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
         tf.keras.layers.MaxPooling2D(2, 2),
+        tf.keras.layers.Dropout(0.25),  # Dropout after first pooling layer
+
         tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
         tf.keras.layers.MaxPooling2D(2, 2),
+        tf.keras.layers.Dropout(0.25),  # Dropout after second pooling layer
+
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dropout(0.5),  # Higher dropout rate before the final dense layer
         tf.keras.layers.Dense(2, activation='softmax')
     ])
 
@@ -118,89 +131,70 @@ def create_model():
     return model
 
 
-def train_model(images, labels, model, epochs):
-    model.fit(images, labels, epochs=epochs)
-    loss, accuracy = model.evaluate(images, labels)
+def create_image_generator():
+    datagen = ImageDataGenerator(
+        rotation_range=40,  # Randomly rotate images in the range (degrees, 0 to 180)
+        width_shift_range=0.2,  # Randomly shift images horizontally (fraction of total width)
+        height_shift_range=0.2,  # Randomly shift images vertically (fraction of total height)
+        shear_range=0.2,  # Randomly shear transformations
+        zoom_range=0.2,  # Randomly zoom image
+        horizontal_flip=True,  # Randomly flip images
+        fill_mode='nearest',  # Strategy used for filling in newly created pixels
+        rescale=1. / 255  # Rescale the pixel values (important for normalization)
+    )
+
+    return datagen
+
+def train_model(images, model, epochs):
+    model.fit(images, epochs=epochs)
+    loss, accuracy = model.evaluate(images)
     return loss, accuracy
 
 
-def augment_image(img):
-    # Random horizontal flip
-    if random.random() > 0.5:
-        img = ImageOps.mirror(img)
+def load_training_images(datagen):
+    directory = filedialog.askdirectory(title="Select training data directory")
+    train_generator = datagen.flow_from_directory(
+        directory,  # Path to the target directory
+        target_size=(224, 224),  # Resizes all images to 224 x 224
+        batch_size=32,  # Size of the batches of data (default: 32)
+        class_mode='binary'  # Type of classification (binary for 2 classes)
+    )
 
-    # Random rotation
-    rotation_degree = random.randint(-30, 30)  # Adjust the degree range as needed
-    img = img.rotate(rotation_degree)
-
-    # Random color jitter
-    if random.random() > 0.5:
-        enhancer = ImageEnhance.Color(img)
-        img = enhancer.enhance(random.uniform(0.5, 1.5))
-
-    return img
+    return train_generator
 
 
-def load_training_images():
-    filetypes = ('.png', '.jpg', '.jpeg')  # Simplified and correct handling for file extensions
-    images = []
-    labels = []
-    directory = filedialog.askdirectory(title="Select Directory")
-    if not directory:
-        print("No training images selected")
-        return np.array([]), np.array([])  # Return empty lists if no directory is selected
-
-    label_mapping = {'cats': 0, 'dogs': 1}
-
-    for folder_name in os.listdir(directory):
-        folder_path = os.path.join(directory, folder_name)
-        if os.path.isdir(folder_path):
-            for image_file in os.listdir(folder_path):
-                if image_file.lower().endswith(filetypes):  # Check file extension
-                    image_path = os.path.join(folder_path, image_file)
-                    try:
-                        with Image.open(image_path) as img:
-                            img = augment_image(img)
-                            img = img.resize((224, 224))
-                            img = img.convert('RGB')
-                            img_array = np.array(img) / 255.0
-                            images.append(img_array)
-                            labels.append(label_mapping[folder_name])  # Assuming folder names are class names
-                    except Exception as e:
-                        print(f"Error processing {image_path}: {e}")
-
-    return np.array(images), np.array(labels)
-
-
-def load_test_image():
+def load_test_image(test_datagen):
     filetypes = [('PNG files', '*.png'), ('JPG files', '*.jpg'), ('JPEG files', '*.jpeg')]
-    image_name = filedialog.askopenfilename(title="Open file", filetypes=filetypes)
+    image_path = filedialog.askopenfilename(title="Open file", filetypes=filetypes)
 
-    if not image_name:
-        print("No test images selected")
-        return np.array([]), None
+    # Load and preprocess the image
+    img = load_img(image_path, target_size=(224, 224))
+    img_array = img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+    img_array = next(test_datagen.flow(img_array, batch_size=1))[0]  # Apply the same transformations as training
 
-    img = Image.open(image_name)
-    img = img.resize((224, 224))
-    img = img.convert('RGB')
-    img_array = np.array(img) / 255.0
+    # Convert array back to PIL image for display
+    img = Image.fromarray((img_array * 255).astype('uint8'), 'RGB')
 
     return img_array, img
 
 
 def classify_image(image_array, class_names, model):
     if image_array is None:
-        return "No image loaded"
+        return "No image loaded", None
 
     image_array = np.expand_dims(image_array, axis=0)  # Prepare batch
     predictions = model.predict(image_array)
     predicted_index = np.argmax(predictions, axis=1)[0]  # Get the index of the highest probability
     predicted_class_name = class_names[predicted_index]  # Map index to class name
+    confidence = np.max(predictions) * 100  # Confidence percentage
 
-    return predicted_class_name
+    return predicted_class_name, confidence
+
 
 
 if __name__ == "__main__":
     root = tk.Tk()
+    root.geometry("740x640")
     app = ImageClassifierApp(root)
     root.mainloop()
