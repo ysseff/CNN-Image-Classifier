@@ -3,7 +3,9 @@ from tkinter import filedialog, ttk
 import tensorflow as tf
 import numpy as np
 from PIL import Image, ImageTk
+from keras.src.callbacks import ModelCheckpoint
 from keras.src.legacy.preprocessing.image import ImageDataGenerator
+from keras.src.saving import load_model
 from keras.src.utils import load_img, img_to_array
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -20,11 +22,19 @@ class ImageClassifierApp:
         self.test_datagen = ImageDataGenerator(rescale=1. / 255)
         self.test_datagen1 = ImageDataGenerator(rescale=1. / 255)
 
-
         # GUI components setup
         self.setup_widgets()
 
     def setup_widgets(self):
+        frame_model = tk.LabelFrame(self.root, text="Load Model", padx=10, pady=10)
+        frame_model.pack(padx=10, pady=5, fill="both", expand="yes")
+
+        btn_load_model = ttk.Button(frame_model, text="Load Classification Model", command=self.load_model)
+        btn_load_model.pack(side=tk.LEFT)
+
+        self.loaded_accuracy_label = tk.Label(frame_model)
+        self.loaded_accuracy_label.pack(side=tk.RIGHT, padx=30)
+
         frame_train = tk.LabelFrame(self.root, text="Training Images", padx=10, pady=10)
         frame_train.pack(padx=10, pady=5, fill="both", expand="yes")
 
@@ -67,19 +77,34 @@ class ImageClassifierApp:
         self.output_text.pack(fill='both', padx=10, pady=5, expand=True)
         self.output_text.configure( font='helvetica 14')
 
+    def load_model(self):
+        try:
+            filetypes = [("Keras Model", "*.keras")]
+            model_path = filedialog.askopenfilename(title="Open file", filetypes=filetypes)
+            if model_path:
+                self.model = load_model(model_path)
+                val_loss, val_accuracy = self.model.evaluate(self.validation_set)
+                print(f"Loaded Model Validation Accuracy: {val_accuracy * 100:.2f}%")
+                self.output_text.insert(tk.END, "Classification model loaded successfully.\n")
+                self.loaded_accuracy_label.config(text=f"Accuracy: {val_accuracy * 100:.2f}%, Loss: {val_loss * 100:.2f}%", font=("Helvetica", 14))
+            else:
+                self.output_text.insert(tk.END, "No file selected.\n")
+        except AttributeError as e:
+            self.output_text.insert(tk.END, "Please load a validation set first\n")
+
     def load_training(self):
         try:
-            self.train_set = load_training_images(self.datagen)  # Your function to load images
+            self.train_set = load_training_images(self.datagen)
             self.output_text.insert(tk.END, "Training images loaded successfully.\n")
         except FileNotFoundError:
             self.output_text.insert(tk.END, "Training images not found.\n")
 
     def load_validation(self):
         try:
-            self.validation_set = load_validation_set(self.test_datagen)  # Your function to load images
-            self.output_text.insert(tk.END, "Test set loaded successfully.\n")
+            self.validation_set = load_validation_set(self.test_datagen)
+            self.output_text.insert(tk.END, "Validation set loaded successfully.\n")
         except FileNotFoundError:
-            self.output_text.insert(tk.END, "Test set not found.\n")
+            self.output_text.insert(tk.END, "Validation set not found.\n")
 
     def train_model(self):
         try:
@@ -87,6 +112,7 @@ class ImageClassifierApp:
             loss, accuracy, history = train_model(self.train_set, self.validation_set, self.model, epochs)
             self.plot_training_history(history)
             self.accuracy_label.config(text=f"Accuracy: {accuracy*100:.2f}%, Loss: {loss*100:.2f}%", font=("Helvetica", 14))
+            self.loaded_accuracy_label.config(text="")
             self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
         except Exception as e:
             self.output_text.insert(tk.END, "No training data loaded.\n")
@@ -95,14 +121,14 @@ class ImageClassifierApp:
 
     def load_and_display_test(self):
         try:
-            img_array, img = load_test_image(self.test_datagen1)  # Ensure to pass the correct ImageDataGenerator instance
+            img_array, img = load_test_image(self.test_datagen1)
             if img is not None:
                 # Prepare the image for display
                 img = img.resize((180, 180), Image.LANCZOS)  # Resize using PIL if needed for display purposes
                 photo = ImageTk.PhotoImage(img)
                 self.image_label.config(image=photo)
                 self.image_label.image = photo
-                self.test_img = img_array  # This should be the processed array used for prediction
+                self.test_img = img_array
                 self.output_text.insert(tk.END, "Test image loading complete.\n")
             else:
                 self.output_text.insert(tk.END, "Failed to load test image.\n")
@@ -157,17 +183,25 @@ class ImageClassifierApp:
 def create_model():
     model = tf.keras.models.Sequential([
         tf.keras.layers.Input(shape=(64, 64, 3)),
-        tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
+        tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'),
+        tf.keras.layers.BatchNormalization(),
         tf.keras.layers.MaxPooling2D(2, 2),
-        tf.keras.layers.Dropout(0.25),  # Dropout after first pooling layer
+        tf.keras.layers.Dropout(0.25),
 
-        tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+        tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu'),
+        tf.keras.layers.BatchNormalization(),
         tf.keras.layers.MaxPooling2D(2, 2),
-        tf.keras.layers.Dropout(0.25),  # Dropout after second pooling layer
+        tf.keras.layers.Dropout(0.25),
+
+        tf.keras.layers.Conv2D(128, (3, 3), padding='same', activation='relu'),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.MaxPooling2D(2, 2),
+        tf.keras.layers.Dropout(0.25),
 
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dropout(0.5),  # Higher dropout rate before the final dense layer
+        tf.keras.layers.Dropout(0.5),
+        tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(1, activation='sigmoid')
     ])
 
@@ -192,8 +226,16 @@ def create_image_generator():
     return datagen
 
 def train_model(training_images, validation_images, model, epochs):
-    history = model.fit(x=training_images, validation_data=validation_images, epochs=epochs)
-    loss, accuracy = model.evaluate(training_images)
+    checkpoint_callback = ModelCheckpoint(
+        'model_best.keras',
+        monitor='val_accuracy',
+        save_best_only=True,
+        mode='max',
+        verbose=1,
+        save_weights_only=False  # Ensure full model is saved
+    )
+    history = model.fit(x=training_images, validation_data=validation_images, epochs=epochs, callbacks=[checkpoint_callback])
+    loss, accuracy = model.evaluate(validation_images)
     return loss, accuracy, history
 
 
