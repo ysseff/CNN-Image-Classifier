@@ -5,6 +5,8 @@ import numpy as np
 from PIL import Image, ImageTk
 from keras.src.legacy.preprocessing.image import ImageDataGenerator
 from keras.src.utils import load_img, img_to_array
+from matplotlib import pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class ImageClassifierApp:
@@ -29,7 +31,7 @@ class ImageClassifierApp:
         btn_load_train = ttk.Button(frame_train, text="Load Training Set", command=self.load_training)
         btn_load_train.pack(side=tk.LEFT)
 
-        self.btn_load_test_set = ttk.Button(frame_train, text="Load Testing Set", command=self.load_validation)
+        self.btn_load_test_set = ttk.Button(frame_train, text="Load Validation Set", command=self.load_validation)
         self.btn_load_test_set.pack(side=tk.LEFT, padx=10)
 
         self.accuracy_label = tk.Label(frame_train)
@@ -61,7 +63,7 @@ class ImageClassifierApp:
         btn_test = ttk.Button(root, text="Classify Image", command=self.classify_img)
         btn_test.pack(fill='x', padx=10, pady=5)
 
-        self.output_text = tk.Text(self.root, height=10, background='white', foreground='black')
+        self.output_text = tk.Text(self.root, height=5, background='white', foreground='black')
         self.output_text.pack(fill='both', padx=10, pady=5, expand=True)
         self.output_text.configure( font='helvetica 14')
 
@@ -74,7 +76,7 @@ class ImageClassifierApp:
 
     def load_validation(self):
         try:
-            self.test_set = load_training_set(self.test_datagen)  # Your function to load images
+            self.validation_set = load_validation_set(self.test_datagen)  # Your function to load images
             self.output_text.insert(tk.END, "Test set loaded successfully.\n")
         except FileNotFoundError:
             self.output_text.insert(tk.END, "Test set not found.\n")
@@ -82,8 +84,9 @@ class ImageClassifierApp:
     def train_model(self):
         try:
             epochs = int(self.entry_epochs.get())
-            loss, accuracy = train_model(self.train_set, self.test_set, self.model, epochs)
-            self.accuracy_label.config(text=f"Accuracy:{accuracy*100:.2f}%, Loss: {loss*100:.2f}%", font=("Helvetica", 16))
+            loss, accuracy, history = train_model(self.train_set, self.validation_set, self.model, epochs)
+            self.plot_training_history(history)
+            self.accuracy_label.config(text=f"Accuracy: {accuracy*100:.2f}%, Loss: {loss*100:.2f}%", font=("Helvetica", 14))
             self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
         except Exception as e:
             self.output_text.insert(tk.END, "No training data loaded.\n")
@@ -113,10 +116,42 @@ class ImageClassifierApp:
                 self.output_text.insert(tk.END, "Failed to load test data.\n")
 
             result, confidence = classify_image(self.test_img, self.model)
-            self.result_label.config(text=f"class: {result}, confidence: {confidence:.2f}%", font=("Helvetica", 16))
+            self.result_label.config(text=f"Class: {result}, Confidence: {confidence:.2f}%", font=("Helvetica", 14))
             self.output_text.insert(tk.END, f"Image classified as: {result}\n")
         except AttributeError:
             self.output_text.insert(tk.END, "Failed to classify the image due to the lack of test data.\n")
+
+
+    def plot_training_history(self, history):
+        # Create a figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6))
+
+        # Plot training and validation accuracy
+        ax1.plot(history.history['accuracy'], label='Training Accuracy')
+        ax1.plot(history.history['val_accuracy'], label='Validation Accuracy')
+        ax1.set_ylabel('Accuracy')
+        ax1.set_title('Training and Validation Accuracy')
+        ax1.legend()
+
+        # Plot training and validation loss
+        ax2.plot(history.history['loss'], label='Training Loss')
+        ax2.plot(history.history['val_loss'], label='Validation Loss')
+        ax2.set_ylabel('Loss')
+        ax2.set_xlabel('Epoch')
+        ax2.set_title('Training and Validation Loss')
+        ax2.legend()
+
+        fig.savefig('training_history.png')  # Saves the plot as a PNG file
+
+        # Save the figure to a file in the project folder
+        fig.subplots_adjust(hspace=0.5)  # Increase vertical spacing
+
+        # Display the figure
+        plot_window = tk.Toplevel(self.root)
+        plot_window.title("Training History")
+        canvas = FigureCanvasTkAgg(fig, master=plot_window)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
 
 def create_model():
@@ -157,9 +192,9 @@ def create_image_generator():
     return datagen
 
 def train_model(training_images, validation_images, model, epochs):
-    model.fit(x=training_images, validation_data=validation_images, epochs=epochs)
+    history = model.fit(x=training_images, validation_data=validation_images, epochs=epochs)
     loss, accuracy = model.evaluate(training_images)
-    return loss, accuracy
+    return loss, accuracy, history
 
 
 def load_training_images(datagen):
@@ -174,7 +209,7 @@ def load_training_images(datagen):
     return train_generator
 
 
-def load_training_set(test_datagen):
+def load_validation_set(test_datagen):
     directory = filedialog.askdirectory(title="Select test data directory")
     test_generator = test_datagen.flow_from_directory(
         directory,  # Path to the target directory
@@ -218,6 +253,6 @@ def classify_image(image_array, model):
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("740x640")
+    root.geometry("760x620")
     app = ImageClassifierApp(root)
     root.mainloop()
