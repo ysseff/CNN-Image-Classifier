@@ -16,8 +16,6 @@ class ImageClassifierApp:
         self.root = root
         self.root.title("CNN Image Classifier")
 
-        # Initialize the model
-        self.model = create_model()
         self.datagen = create_image_generator()
         self.test_datagen = ImageDataGenerator(rescale=1. / 255)
         self.test_datagen1 = ImageDataGenerator(rescale=1. / 255)
@@ -26,22 +24,25 @@ class ImageClassifierApp:
         self.setup_widgets()
 
     def setup_widgets(self):
-        frame_model = tk.LabelFrame(self.root, text="Load Model", padx=10, pady=10)
+        frame_model = tk.LabelFrame(self.root, text="Model", padx=10, pady=10)
         frame_model.pack(padx=10, pady=5, fill="both", expand="yes")
 
-        btn_load_model = ttk.Button(frame_model, text="Load Classification Model", command=self.load_model)
-        btn_load_model.pack(side=tk.LEFT)
+        btn_create_model = ttk.Button(frame_model, text="Create New Model", command=self.create_model)
+        btn_create_model.pack(side=tk.LEFT)
+
+        btn_load_model = ttk.Button(frame_model, text="Load Trained Model", command=self.load_model)
+        btn_load_model.pack(side=tk.LEFT, padx=10)
 
         self.loaded_accuracy_label = tk.Label(frame_model)
         self.loaded_accuracy_label.pack(side=tk.RIGHT, padx=30)
 
-        frame_train = tk.LabelFrame(self.root, text="Training Images", padx=10, pady=10)
+        frame_train = tk.LabelFrame(self.root, text="Training Images Dataset", padx=10, pady=10)
         frame_train.pack(padx=10, pady=5, fill="both", expand="yes")
 
-        btn_load_train = ttk.Button(frame_train, text="Load Training Set", command=self.load_training)
+        btn_load_train = ttk.Button(frame_train, text="Load Training", command=self.load_training)
         btn_load_train.pack(side=tk.LEFT)
 
-        self.btn_load_test_set = ttk.Button(frame_train, text="Load Validation Set", command=self.load_validation)
+        self.btn_load_test_set = ttk.Button(frame_train, text="Load Validation Dataset", command=self.load_validation)
         self.btn_load_test_set.pack(side=tk.LEFT, padx=10)
 
         self.accuracy_label = tk.Label(frame_train)
@@ -76,6 +77,12 @@ class ImageClassifierApp:
         self.output_text = tk.Text(self.root, height=5, background='white', foreground='black')
         self.output_text.pack(fill='both', padx=10, pady=5, expand=True)
         self.output_text.configure( font='helvetica 14')
+
+
+    def create_model(self):
+        # Initialize the model
+        self.model = create_model()
+
 
     def load_model(self):
         try:
@@ -115,7 +122,7 @@ class ImageClassifierApp:
             self.loaded_accuracy_label.config(text="")
             self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
         except Exception as e:
-            self.output_text.insert(tk.END, "No training data loaded.\n")
+            self.output_text.insert(tk.END, f"An error occurred!\nMake sure to load trainnig and validation datasets and create or load a model.\n")
             print(e)
 
 
@@ -145,7 +152,7 @@ class ImageClassifierApp:
             self.result_label.config(text=f"Class: {result}, Confidence: {confidence:.2f}%", font=("Helvetica", 14))
             self.output_text.insert(tk.END, f"Image classified as: {result}\n")
         except AttributeError:
-            self.output_text.insert(tk.END, "Failed to classify the image due to the lack of test data.\n")
+            self.output_text.insert(tk.END, "An error occurred!\nMake sure to create or load a model first\n")
 
 
     def plot_training_history(self, history):
