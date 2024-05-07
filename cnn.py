@@ -189,7 +189,7 @@ class ImageClassifierApp:
 
 def create_model():
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Input(shape=(64, 64, 3)),
+        tf.keras.layers.Input(shape=(128, 128, 3)),
         tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'),
         tf.keras.layers.BatchNormalization(),
         tf.keras.layers.MaxPooling2D(2, 2),
@@ -250,7 +250,7 @@ def load_training_images(datagen):
     directory = filedialog.askdirectory(title="Select training data directory")
     train_generator = datagen.flow_from_directory(
         directory,  # Path to the target directory
-        target_size=(64, 64),  # Resizes all images to 224 x 224
+        target_size=(128, 128),  # Resizes all images to 224 x 224
         batch_size=32,  # Size of the batches of data (default: 32)
         class_mode='binary'  # Type of classification (binary for 2 classes)
     )
@@ -262,7 +262,7 @@ def load_validation_set(test_datagen):
     directory = filedialog.askdirectory(title="Select test data directory")
     test_generator = test_datagen.flow_from_directory(
         directory,  # Path to the target directory
-        target_size=(64, 64),  # Resizes all images to 224 x 224
+        target_size=(128, 128),  # Resizes all images to 224 x 224
         batch_size=32,  # Size of the batches of data (default: 32)
         class_mode='binary'  # Type of classification (binary for 2 classes)
     )
@@ -275,7 +275,7 @@ def load_test_image(test_datagen):
     image_path = filedialog.askopenfilename(title="Open file", filetypes=filetypes)
 
     # Load and preprocess the image
-    img = load_img(image_path, target_size=(64, 64))
+    img = load_img(image_path, target_size=(128, 128))
     img_array = img_to_array(img)
     img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
     img_array = next(test_datagen.flow(img_array, batch_size=1))[0]  # Apply the same transformations as training
