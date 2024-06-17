@@ -20,10 +20,10 @@ class ImageClassifierApp:
         self.test_datagen = ImageDataGenerator(rescale=1. / 255)
         self.test_datagen1 = ImageDataGenerator(rescale=1. / 255)
 
-        # GUI components setup
         self.setup_widgets()
 
     def setup_widgets(self):
+        # Model Frame
         frame_model = tk.LabelFrame(self.root, text="Model", padx=10, pady=10)
         frame_model.pack(padx=10, pady=5, fill="both", expand="yes")
 
@@ -36,6 +36,7 @@ class ImageClassifierApp:
         self.loaded_accuracy_label = tk.Label(frame_model)
         self.loaded_accuracy_label.pack(side=tk.RIGHT, padx=30)
 
+        # Training Images Dataset Frame
         frame_train = tk.LabelFrame(self.root, text="Training Images Dataset", padx=10, pady=10)
         frame_train.pack(padx=10, pady=5, fill="both", expand="yes")
 
@@ -48,6 +49,7 @@ class ImageClassifierApp:
         self.accuracy_label = tk.Label(frame_train)
         self.accuracy_label.pack(side=tk.RIGHT, padx=30)
 
+        # Test Image Frame
         frame_test = tk.LabelFrame(self.root, text="Test Image", padx=10, pady=10)
         frame_test.pack(padx=10, pady=5, fill="both", expand="yes")
 
@@ -60,6 +62,7 @@ class ImageClassifierApp:
         self.result_label = tk.Label(frame_test)
         self.result_label.pack(side=tk.RIGHT, padx=30)
 
+        # Configuration Frame
         frame_config = tk.LabelFrame(self.root, text="Configuration", padx=10, pady=10)
         frame_config.pack(padx=10, pady=5, fill="both", expand="yes")
 
@@ -68,21 +71,20 @@ class ImageClassifierApp:
         self.entry_epochs = ttk.Spinbox(frame_config, from_=10, to=30, width=5, textvariable=self.initial_value, wrap=False)
         self.entry_epochs.pack(side=tk.LEFT, padx=5)
 
+        # Train and Classify Buttons
         btn_train = ttk.Button(root, text="Train Network", command=self.train_model)
         btn_train.pack(fill='x', padx=10, pady=5)
 
         btn_test = ttk.Button(root, text="Classify Image", command=self.classify_img)
         btn_test.pack(fill='x', padx=10, pady=5)
 
+        # Output Text
         self.output_text = tk.Text(self.root, height=5, background='white', foreground='black')
         self.output_text.pack(fill='both', padx=10, pady=5, expand=True)
-        self.output_text.configure( font='helvetica 14')
-
+        self.output_text.configure(font='helvetica 14')
 
     def create_model(self):
-        # Initialize the model
         self.model = create_model()
-
 
     def load_model(self):
         try:
@@ -91,12 +93,11 @@ class ImageClassifierApp:
             if model_path:
                 self.model = load_model(model_path)
                 val_loss, val_accuracy = self.model.evaluate(self.validation_set)
-                print(f"Loaded Model Validation Accuracy: {val_accuracy * 100:.2f}%")
                 self.output_text.insert(tk.END, "Classification model loaded successfully.\n")
                 self.loaded_accuracy_label.config(text=f"Accuracy: {val_accuracy * 100:.2f}%, Loss: {val_loss * 100:.2f}%", font=("Helvetica", 14))
             else:
                 self.output_text.insert(tk.END, "No file selected.\n")
-        except AttributeError as e:
+        except AttributeError:
             self.output_text.insert(tk.END, "Please load a validation set first\n")
 
     def load_training(self):
@@ -118,20 +119,18 @@ class ImageClassifierApp:
             epochs = int(self.entry_epochs.get())
             loss, accuracy, history = train_model(self.train_set, self.validation_set, self.model, epochs)
             self.plot_training_history(history)
-            self.accuracy_label.config(text=f"Accuracy: {accuracy*100:.2f}%, Loss: {loss*100:.2f}%", font=("Helvetica", 14))
+            self.accuracy_label.config(text=f"Accuracy: {accuracy * 100:.2f}%, Loss: {loss * 100:.2f}%", font=("Helvetica", 14))
             self.loaded_accuracy_label.config(text="")
-            self.output_text.insert(tk.END, f"Training complete with loss: {loss*100:.2f} and accuracy: {accuracy*100:.2f}\n")
+            self.output_text.insert(tk.END, f"Training complete with loss: {loss * 100:.2f} and accuracy: {accuracy * 100:.2f}\n")
         except Exception as e:
-            self.output_text.insert(tk.END, f"An error occurred!\nMake sure to load trainnig and validation datasets and create or load a model.\n")
+            self.output_text.insert(tk.END, "An error occurred! Make sure to load training and validation datasets and create or load a model.\n")
             print(e)
-
 
     def load_and_display_test(self):
         try:
             img_array, img = load_test_image(self.test_datagen1)
             if img is not None:
-                # Prepare the image for display
-                img = img.resize((180, 180), Image.LANCZOS)  # Resize using PIL if needed for display purposes
+                img = img.resize((180, 180), Image.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 self.image_label.config(image=photo)
                 self.image_label.image = photo
@@ -142,31 +141,27 @@ class ImageClassifierApp:
         except FileNotFoundError:
             self.output_text.insert(tk.END, "Test image not found.\n")
 
-
     def classify_img(self):
         try:
             if self.test_img is None:
                 self.output_text.insert(tk.END, "Failed to load test data.\n")
+                return
 
             result, confidence = classify_image(self.test_img, self.model)
             self.result_label.config(text=f"Class: {result}, Confidence: {confidence:.2f}%", font=("Helvetica", 14))
             self.output_text.insert(tk.END, f"Image classified as: {result}\n")
         except AttributeError:
-            self.output_text.insert(tk.END, "An error occurred!\nMake sure to create or load a model first\n")
-
+            self.output_text.insert(tk.END, "An error occurred! Make sure to create or load a model first\n")
 
     def plot_training_history(self, history):
-        # Create a figure with two subplots
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6))
 
-        # Plot training and validation accuracy
         ax1.plot(history.history['accuracy'], label='Training Accuracy')
         ax1.plot(history.history['val_accuracy'], label='Validation Accuracy')
         ax1.set_ylabel('Accuracy')
         ax1.set_title('Training and Validation Accuracy')
         ax1.legend()
 
-        # Plot training and validation loss
         ax2.plot(history.history['loss'], label='Training Loss')
         ax2.plot(history.history['val_loss'], label='Validation Loss')
         ax2.set_ylabel('Loss')
@@ -174,18 +169,14 @@ class ImageClassifierApp:
         ax2.set_title('Training and Validation Loss')
         ax2.legend()
 
-        fig.savefig('training_history.png')  # Saves the plot as a PNG file
+        fig.savefig('training_history.png')
+        fig.subplots_adjust(hspace=0.5)
 
-        # Save the figure to a file in the project folder
-        fig.subplots_adjust(hspace=0.5)  # Increase vertical spacing
-
-        # Display the figure
         plot_window = tk.Toplevel(self.root)
         plot_window.title("Training History")
         canvas = FigureCanvasTkAgg(fig, master=plot_window)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
 
 def create_model():
     model = tf.keras.models.Sequential([
@@ -217,19 +208,17 @@ def create_model():
                   metrics=['accuracy'])
     return model
 
-
 def create_image_generator():
     datagen = ImageDataGenerator(
-        rotation_range=30,  # Randomly rotate images in the range (degrees, 0 to 180)
-        width_shift_range=0.2,  # Randomly shift images horizontally (fraction of total width)
-        height_shift_range=0.2,  # Randomly shift images vertically (fraction of total height)
-        shear_range=0.2,  # Randomly shear transformations
-        zoom_range=0.2,  # Randomly zoom image
-        horizontal_flip=True,  # Randomly flip images
-        fill_mode='nearest',  # Strategy used for filling in newly created pixels
-        rescale=1. / 255  # Rescale the pixel values (important for normalization)
+        rotation_range=30,
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        shear_range=0.2,
+        zoom_range=0.2,
+        horizontal_flip=True,
+        fill_mode='nearest',
+        rescale=1. / 255
     )
-
     return datagen
 
 def train_model(training_images, validation_images, model, epochs):
@@ -239,66 +228,54 @@ def train_model(training_images, validation_images, model, epochs):
         save_best_only=True,
         mode='max',
         verbose=1,
-        save_weights_only=False  # Ensure full model is saved
+        save_weights_only=False
     )
     history = model.fit(x=training_images, validation_data=validation_images, epochs=epochs, callbacks=[checkpoint_callback])
     loss, accuracy = model.evaluate(validation_images)
     return loss, accuracy, history
 
-
 def load_training_images(datagen):
     directory = filedialog.askdirectory(title="Select training data directory")
     train_generator = datagen.flow_from_directory(
-        directory,  # Path to the target directory
-        target_size=(128, 128),  # Resizes all images to 224 x 224
-        batch_size=32,  # Size of the batches of data (default: 32)
-        class_mode='binary'  # Type of classification (binary for 2 classes)
+        directory,
+        target_size=(128, 128),
+        batch_size=32,
+        class_mode='binary'
     )
-
     return train_generator
-
 
 def load_validation_set(test_datagen):
     directory = filedialog.askdirectory(title="Select test data directory")
     test_generator = test_datagen.flow_from_directory(
-        directory,  # Path to the target directory
-        target_size=(128, 128),  # Resizes all images to 224 x 224
-        batch_size=32,  # Size of the batches of data (default: 32)
-        class_mode='binary'  # Type of classification (binary for 2 classes)
+        directory,
+        target_size=(128, 128),
+        batch_size=32,
+        class_mode='binary'
     )
-
     return test_generator
-
 
 def load_test_image(test_datagen):
     filetypes = [('PNG files', '*.png'), ('JPG files', '*.jpg'), ('JPEG files', '*.jpeg')]
     image_path = filedialog.askopenfilename(title="Open file", filetypes=filetypes)
 
-    # Load and preprocess the image
     img = load_img(image_path, target_size=(128, 128))
     img_array = img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-    img_array = next(test_datagen.flow(img_array, batch_size=1))[0]  # Apply the same transformations as training
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = next(test_datagen.flow(img_array, batch_size=1))[0]
 
-    # Convert array back to PIL image for display
     img = Image.fromarray((img_array * 255).astype('uint8'), 'RGB')
-
     return img_array, img
-
 
 def classify_image(image_array, model):
     if image_array is None:
         return "No image loaded", None
 
-    image_array = np.expand_dims(image_array, axis=0)  # Prepare batch
+    image_array = np.expand_dims(image_array, axis=0)
     predictions = model.predict(image_array)
     predicted_class = 'dog' if predictions[0, 0] > 0.5 else 'cat'
     confidence = predictions[0, 0] if predicted_class == 'dog' else 1 - predictions[0, 0]
 
     return predicted_class, confidence * 100
-
-
-
 
 if __name__ == "__main__":
     root = tk.Tk()
